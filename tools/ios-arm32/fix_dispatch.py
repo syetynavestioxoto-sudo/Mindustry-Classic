@@ -17,7 +17,18 @@ FILES = [
     "cctools/ld64/src/ld/InputFiles.cpp",
     "cctools/ld64/src/ld/OutputFile.cpp",
     "cctools/ld64/src/ld/Resolver.cpp",
+    "cctools/ld64/src/ld/libcodedirectory.c",
 ]
+
+# Symbols Apple removed from modern libdispatch (Linux swift-corelibs).
+# Serial is the default attr (NULL); priority constants map to QoS classes.
+QOS_COMPAT = {
+    "DISPATCH_QUEUE_SERIAL": "NULL",
+    "DISPATCH_QUEUE_PRIORITY_HIGH": "QOS_CLASS_USER_INITIATED",
+    "DISPATCH_QUEUE_PRIORITY_DEFAULT": "QOS_CLASS_DEFAULT",
+    "DISPATCH_QUEUE_PRIORITY_LOW": "QOS_CLASS_UTILITY",
+    "DISPATCH_QUEUE_PRIORITY_BACKGROUND": "QOS_CLASS_BACKGROUND",
+}
 
 PAT = re.compile(
     r"dispatch_apply\s*\((.*),\s*DISPATCH_APPLY_AUTO\s*,\s*\^\(size_t\s+(\w+)\)\s*\{"
@@ -99,7 +110,20 @@ def main(root="."):
             pos = close + 3
             count += 1
         out.append(src[pos:])
-        open(path, "w").write("".join(out))
+        patched = "".join(out)
+        # compat shims for symbols removed from modern libdispatch
+        for old, new in QOS_COMPAT.items():
+            if old in patched:
+                patched = patched.replace(old, new)
+                count += 1
+        # make sure QoS macros are visible
+        if "QOS_CLASS_" in patched and "sys/qos.h" not in patched:
+            patched = patched.replace(
+                "#include <dispatch/dispatch.h>",
+                "#include <dispatch/dispatch.h>\n#include <sys/qos.h>",
+                1,
+            )
+        open(path, "w").write(patched)
         print(f"{rel}: patched {count}")
         total += count
     print(f"total patched: {total}")
