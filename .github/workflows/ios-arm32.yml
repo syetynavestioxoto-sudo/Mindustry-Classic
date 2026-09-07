@@ -110,9 +110,14 @@ jobs:
         run: |
           export SDK=/tmp/sdks/iPhoneOS10.3.sdk
           export LD=/opt/cctools/bin/arm-apple-darwin11-ld
-          $LD -arch armv7 -platform_version ios 8.0 10.3 -syslibroot $SDK \
+          # NOTE: ld64-956 aborts on -platform_version for armv7
+          # (recopyUUIDCommand assertion), so use classic version flags
+          # plus -no_uuid (UUID not needed for jailbreak install).
+          $LD -arch armv7 -ios_version_min 8.0 -sdk_version 10.3 -no_uuid \
+            -syslibroot $SDK \
             -o out/hello out/hello.o -lSystem
-          $LD -arch armv7 -platform_version ios 8.0 10.3 -syslibroot $SDK \
+          $LD -arch armv7 -ios_version_min 8.0 -sdk_version 10.3 -no_uuid \
+            -syslibroot $SDK \
             -o out/Classic8 out/main.o \
             -framework UIKit -framework Foundation -framework CoreGraphics \
             -lobjc -lSystem
