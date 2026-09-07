@@ -96,7 +96,7 @@ jobs:
           echo "$HOME/cctools/bin" >> "$GITHUB_PATH"
           if [ -x "$HOME/cctools/bin/arm-apple-darwin11-ld" ]; then
             echo "toolchain cache hit"
-            arm-apple-darwin11-ld -v
+            "$HOME/cctools/bin/arm-apple-darwin11-ld" -v
             exit 0
           fi
           git clone --depth 1 https://github.com/tpoechtrager/apple-libtapi.git /tmp/tapi
@@ -111,7 +111,7 @@ jobs:
           # (~10 min) but deterministic; result is cached afterwards.
           make -j1
           make install
-          arm-apple-darwin11-ld -v
+          "$HOME/cctools/bin/arm-apple-darwin11-ld" -v
       - name: Cache Apple toolchain
         uses: actions/cache/save@v4
         if: steps.tc-cache.outputs.cache-hit != 'true'
