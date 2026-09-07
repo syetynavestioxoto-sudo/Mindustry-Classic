@@ -1,0 +1,161 @@
+# Builds the WORKING game: Mindustry Classic for iPad mini 1st gen (A5/armv7).
+#
+# No macOS/Xcode anywhere in this pipeline. RoboVM 2.3.0's AOT compiler is
+# pure Java + bundled Linux LLVM; the only Xcode touchpoints (linker tools,
+# SDK lookup, packaging) are satisfied by tools/ios-fake-xcode on
+# ubuntu-22.04: cctools-port Apple ld64 (built serially, see
+# tools/ios-toolchain/README.md), theos iPhoneOS10.3.sdk, shims.
+# Output is an UNSIGNED IPA (adhoc ldid pseudo-signature) for jailbroken
+# install (AppSync, or re-sign on device).
+
+name: ios-game
+
+on:
+  push:
+    branches: [master]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ROBOVM_DIST_VER: "2.3.0"
+
+jobs:
+  jars:
+    name: Java jars (JDK8 smoke test)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+      - run: ./gradlew --no-daemon :core:jar :kryonet:jar :server:jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: classic-jars
+          path: |
+            core/build/libs/*.jar
+            kryonet/build/libs/*.jar
+            server/build/libs/*.jar
+
+  toolchain:
+    name: Apple toolchain (ld64 + ldid, cached)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - id: tc
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/cctools
+          key: cctools-armv7-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
+      - if: steps.tc.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang llvm autoconf automake libtool \
+            pkg-config cmake python3 uuid-dev libssl-dev libxml2-dev zlib1g-dev \
+            libdispatch-dev libblocksruntime-dev file zip \
+            git g++ make libplist-dev
+          git clone --depth 1 https://github.com/tpoechtrager/apple-libtapi.git /tmp/tapi
+          (cd /tmp/tapi && INSTALLPREFIX="$HOME/cctools" ./build.sh && ./install.sh)
+          git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git /tmp/ct
+          python3 tools/ios-toolchain/fix_dispatch.py /tmp/ct
+          cd /tmp/ct/cctools
+          ./configure --prefix="$HOME/cctools" --with-libtapi="$HOME/cctools" \
+            --target=arm-apple-darwin11
+          # Serial: parallel make silently relinks a corrupt ld here.
+          make -j1
+          make install
+          bash tools/ios-toolchain/build-ldid.sh "$HOME/cctools/bin"
+          "$HOME/cctools/bin/arm-apple-darwin11-ld" -v
+      - uses: actions/cache/save@v4
+        if: steps.tc.outputs.cache-hit != 'true'
+        with:
+          path: ~/cctools
+          key: cctools-armv7-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
+
+  game:
+    name: Game IPA (armv7, unsigned)
+    runs-on: ubuntu-22.04
+    needs: toolchain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+      - id: gmod
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: gradle-mod-${{ hashFiles('**/build.gradle', 'gradle.properties') }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/cctools
+          key: cctools-armv7-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
+      - name: Install host deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang file zip git
+      - name: Seed RoboVM dist (offline, avoids dead http Central)
+        uses: actions/cache/restore@v4
+        id: m2
+        with:
+          path: ~/.m2/repository/com/mobidevelop
+          key: robovm-dist-2.3.0
+      - if: steps.m2.outputs.cache-hit != 'true'
+        run: bash tools/ios-fake-xcode/seed-m2.sh "$HOME/.m2/repository"
+      - name: Expand dist + swap in Linux ldid
+        run: |
+          D="$HOME/.m2/repository/com/mobidevelop/robovm/robovm-dist/2.3.0"
+          mkdir -p "$D/unpacked"
+          if [ ! -d "$D/unpacked/robovm-2.3.0" ]; then
+            tar xzf "$D/robovm-dist-2.3.0-nocompiler.tar.gz" -C "$D/unpacked"
+          fi
+          cp "$HOME/cctools/bin/ldid" "$D/unpacked/robovm-2.3.0/bin/ldid"
+          chmod +x "$D/unpacked/robovm-2.3.0/bin/ldid"
+      - uses: actions/cache/save@v4
+        if: steps.m2.outputs.cache-hit != 'true'
+        with:
+          path: ~/.m2/repository/com/mobidevelop
+          key: robovm-dist-2.3.0
+      - name: Assemble fake Xcode + SDK
+        run: |
+          export FAKEXCODE="$PWD/tools/ios-fake-xcode"
+          bash tools/ios-fake-xcode/fetch-sdk.sh
+          ls "$FAKEXCODE/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs"
+      - name: Build game (.app, thumbv7)
+        env:
+          FAKEXCODE: ${{ github.workspace }}/tools/ios-fake-xcode
+          DEVELOPER_DIR: ${{ github.workspace }}/tools/ios-fake-xcode
+        run: |
+          export PATH="$FAKEXCODE/bin:$HOME/cctools/bin:$PATH"
+          export CTOOLS_BIN="$HOME/cctools/bin"
+          export APPLE_LD="$HOME/cctools/bin/arm-apple-darwin11-ld"
+          ./gradlew --no-daemon :ios:build :ios:robovmInstall -Probovm.archs=thumbv7
+          file ios/build/robovm/IOSLauncher | tee out-bin.txt
+          grep -q "Mach-O armv7" out-bin.txt
+      - uses: actions/cache/save@v4
+        if: steps.gmod.outputs.cache-hit != 'true'
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: gradle-mod-${{ hashFiles('**/build.gradle', 'gradle.properties') }}
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r ios/build/robovm Payload/Mindustry.app
+          python3 -c "
+          import os, zipfile
+          with zipfile.ZipFile('Mindustry-classic-ios8-armv7-unsigned.ipa', 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+              for dp, dn, fn in os.walk('Payload'):
+                  for f in sorted(dn + fn):
+                      p = os.path.join(dp, f)
+                      z.writestr(p + '/', b'') if os.path.isdir(p) else z.write(p, p)
+          "
+          ls -la *.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mindustry-classic-ios8-armv7
+          path: Mindustry-classic-ios8-armv7-unsigned.ipa

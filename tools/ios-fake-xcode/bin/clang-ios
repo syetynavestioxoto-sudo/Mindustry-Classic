@@ -16,7 +16,7 @@ mkdir -p "$(dirname "$LOG")" 2>/dev/null || LOG=/dev/stderr
 echo "clang-ios argv: $*" >>"$LOG"
 
 REAL_CLANG="${REAL_CLANG:-/usr/bin/clang++}"
-LD=/opt/cctools/bin/arm-apple-darwin11-ld
+LD="${APPLE_LD:-/opt/cctools/bin/arm-apple-darwin11-ld}"
 SDK_VERSION=10.3
 
 # compile mode -> real clang

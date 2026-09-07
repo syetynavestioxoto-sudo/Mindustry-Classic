@@ -1,0 +1,17 @@
+FROM docker.io/library/ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -qq && apt-get install -y -qq clang llvm git autoconf automake libtool pkg-config cmake python3 uuid-dev libssl-dev libxml2-dev zlib1g-dev libdispatch-dev libblocksruntime-dev file zip strace vim \
+ && rm -rf /var/lib/apt/lists/*
+COPY tools/ios-toolchain/fix_dispatch.py /tmp/fix_dispatch.py
+RUN git clone --depth 1 https://github.com/tpoechtrager/apple-libtapi.git /opt/tapi-src \
+ && cd /opt/tapi-src && ./build.sh && ./install.sh
+# NOTE: cctools must build serially (-j1): parallel make has missing deps
+# and silently relinks a corrupt ld (valid size, zero content output).
+RUN git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git /opt/ct-src \
+ && python3 /tmp/fix_dispatch.py /opt/ct-src \
+ && cd /opt/ct-src/cctools \
+ && ./configure --prefix=/opt/cctools --with-libtapi=/usr/local --target=arm-apple-darwin11 \
+ && make -j1 \
+ && make install
+ENV PATH="/opt/cctools/bin:${PATH}"
+CMD ["arm-apple-darwin11-ld","-v"]

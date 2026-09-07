@@ -31,7 +31,7 @@ if [ -n "$show" ]; then
     exit 0
 fi
 [ -z "$tool" ] && { echo "xcrun shim: no -f <tool> given" >&2; exit 1; }
-CT=/opt/cctools/bin/arm-apple-darwin11
+CT="${CTOOLS_BIN:-/opt/cctools/bin}"/arm-apple-darwin11
 case "$tool" in
     clang|clang++|cc|gcc|g++) echo "${FAKEXCODE:?}/bin/clang-ios";;
     lipo|nm|otool|strip|ar|ranlib|codesign_allocate|install_name_tool|size|strings)

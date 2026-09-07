@@ -3,7 +3,7 @@
 FROM localhost/ld64-armv7:latest
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \
- && apt-get install -y -qq openjdk-8-jdk unzip zip git \
+ && apt-get install -y -qq openjdk-8-jdk unzip zip git libplist3 libssl3 \
  && rm -rf /var/lib/apt/lists/*
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64 \
     FAKEXCODE=/opt/fakexcode \
