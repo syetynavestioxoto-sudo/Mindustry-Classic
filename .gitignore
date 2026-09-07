@@ -138,3 +138,9 @@ Thumbs.db
 android/libs/
 __pycache__/
 tools/ios-fake-xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/
+
+# local/CI game-build outputs
+out-bin.txt
+out/
+Payload/
+*.ipa
