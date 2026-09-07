@@ -166,6 +166,91 @@ LINKEDIT_SERIAL = """void OutputFile::buildLINKEDITContent(ld::Internal& state)
 """
 
 
+def _spans_matching(src, start_pat):
+    """Yield (open_brace_index, close_brace_index) for each regex match whose
+    match ends with '{'. Handles strings/comments naively (no raw strings)."""
+    for m in re.finditer(start_pat, src):
+        ob = m.end() - 1
+        assert src[ob] == "{"
+        yield (ob, find_matching_close(src, m.end()))
+
+
+def _nested_callable_spans(body):
+    spans = []
+    # ObjC blocks: ^(args) {
+    spans += _spans_matching(body, r"\^\s*\([^)]*\)\s*\{")
+    # C++ lambdas: [captures](args) [mutable] {
+    spans += _spans_matching(
+        body, r"\[[^\[\]\n]*\]\s*\([^)]*\)\s*(?:mutable\s*)?\{"
+    )
+    return spans
+
+
+def _nested_loop_spans(body):
+    spans = []
+    # for/while with balanced parens, then {
+    for m in re.finditer(r"\b(?:for|while|switch)\b", body):
+        i = body.find("(", m.end())
+        if i == -1:
+            continue
+        depth = 0
+        j = i
+        instr = False
+        while j < len(body):
+            c = body[j]
+            if c == '"' and not instr:
+                instr = True
+            elif c == '"' and instr:
+                instr = False
+            elif not instr:
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+            j += 1
+        k = j + 1
+        while k < len(body) and body[k] in " \t\n":
+            k += 1
+        if k < len(body) and body[k] == "{":
+            spans.append((k, find_matching_close(body, k + 1)))
+    # do { ... } while(...);
+    for m in re.finditer(r"\bdo\s*\{", body):
+        ob = m.end() - 1
+        spans.append((ob, find_matching_close(body, m.end())))
+    return spans
+
+
+def _serialize_dispatch_body(body):
+    """Rewrite bare 'return;' (block-exit) as 'continue;' (next index).
+
+    Returns inside nested lambdas/blocks keep block semantics and are
+    preserved; a bare return inside a nested loop is unsupported and raises.
+    """
+    callables = _nested_callable_spans(body)
+    loops = _nested_loop_spans(body)
+
+    def inside(spans, pos):
+        return any(a < pos < b for a, b in spans)
+
+    out = []
+    pos = 0
+    for m in re.finditer(r"\breturn\s*;", body):
+        if inside(callables, m.start()):
+            continue  # inner block/lambda return: preserve
+        if inside(loops, m.start()):
+            raise AssertionError(
+                f"bare return inside nested loop at offset {m.start()}: "
+                + body[max(0, m.start() - 60):m.start() + 8]
+            )
+        out.append(body[pos:m.start()])
+        out.append("continue; /* was block return */")
+        pos = m.end()
+    out.append(body[pos:])
+    return "".join(out)
+
+
 def patch_linkedit(root):
     rel = "cctools/ld64/src/ld/OutputFile.cpp"
     path = f"{root}/{rel}"
@@ -195,7 +280,7 @@ def main(root="."):
             assert src[close + 1:close + 3] == ");", (
                 f"expected ');' in {rel}, got {src[close + 1:close + 11]!r}"
             )
-            body = src[m.end():close]
+            body = _serialize_dispatch_body(src[m.end():close])
             out.append(src[pos:m.start()])
             out.append(
                 f"for (size_t {idx} = 0; {idx} < ({expr}); ++{idx}) {{{body}}}"

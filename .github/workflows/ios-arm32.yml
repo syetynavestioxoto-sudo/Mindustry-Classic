@@ -89,7 +89,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/cctools
-          key: cctools-armv7-${{ hashFiles('tools/ios-arm32/fix_dispatch.py', '.github/workflows/ios-arm32.yml') }}
+          key: cctools-armv7-${{ hashFiles('tools/ios-arm32/fix_dispatch.py') }}
       - name: Build Apple linker (cctools-port + libtapi)
         run: |
           # Cache the built toolchain in $HOME so rebuilds take seconds.
@@ -106,7 +106,10 @@ jobs:
           cd /tmp/ct/cctools
           ./configure --prefix="$HOME/cctools" --with-libtapi="$HOME/cctools" \
             --target=arm-apple-darwin11
-          make -j$(nproc)
+          # NOTE: parallel make has missing deps in this tree and silently
+          # relinks a corrupt ld (valid size, zero content). Serial is slow
+          # (~10 min) but deterministic; result is cached afterwards.
+          make -j1
           make install
           arm-apple-darwin11-ld -v
       - name: Cache Apple toolchain
@@ -114,7 +117,7 @@ jobs:
         if: steps.tc-cache.outputs.cache-hit != 'true'
         with:
           path: ~/cctools
-          key: cctools-armv7-${{ hashFiles('tools/ios-arm32/fix_dispatch.py', '.github/workflows/ios-arm32.yml') }}
+          key: cctools-armv7-${{ hashFiles('tools/ios-arm32/fix_dispatch.py') }}
       - name: Compile armv7 objects (min iOS 8.0)
         run: |
           export SDK=/tmp/sdks/iPhoneOS10.3.sdk
