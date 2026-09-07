@@ -89,6 +89,98 @@ def find_matching_close(src, start):
     return i - 1
 
 
+LINKEDIT_SIG = "void OutputFile::buildLINKEDITContent(ld::Internal& state)"
+
+LINKEDIT_SERIAL = """void OutputFile::buildLINKEDITContent(ld::Internal& state)
+{
+	// linux-serialized: GCD parallel dispatch replaced with serial calls
+	const char* exceptionMsg = nullptr;
+
+	// phase 1: build state.stabs and _importedAtoms, _exportedAtoms, _localAtoms
+	try {
+		this->synthesizeDebugNotes(state);	// needs state.section.atoms, updates: state.stabs
+	}
+	catch (const char* msg) {
+		exceptionMsg = msg;
+	}
+	try {
+		this->partitionSymbolTable(state);	// needs state.section.atoms, updates: _importedAtoms, _exportedAtoms, _localAtoms, `Atom::_outputSymbolIndex`
+	}
+	catch (const char* msg) {
+		exceptionMsg = msg;
+	}
+	if ( exceptionMsg != nullptr )
+		throw exceptionMsg;
+
+	// phase 2: once stabs are built and atoms paritioned into symbol table slices, the symbol table indexes can be recorded
+	assignSymbolIndexes(state);
+
+	// phase 3: build linkedit parts that depend on results of phase 1
+	if ( _hasDyldInfo || _hasSectionRelocations || _hasLocalRelocations || _hasExternalRelocations || _hasThreadedPageStarts ) {
+		try {
+			this->buildLinkEditOpcodes(state);	// needs state.section.atoms, `Atom::_outputSymbolIndex`, updates: _rebasingInfoAtom, _bindingInfoAtom, _weakBindingInfoAtom, _weakBindingInfoAtom, _sectionsRelocationsAtom
+		}
+		catch (const char* msg) {
+			exceptionMsg = msg;
+		}
+	}
+	else if ( _hasChainedFixups ) {
+		try {
+			this->buildChainedFixupInfo(state);  // needs state.section.atoms, updates: _chainedFixupSegments, _importedSymbolsCount, _chainedInfoAtom
+		}
+		catch (const char* msg) {
+			exceptionMsg = msg;
+		}
+	}
+	if ( _options.sharedRegionEligible() || _options.emitSharedRegionMarker() ) {
+		this->makeSplitSegInfo(state);	 // needs state.section.atoms, updates: _splitSegInfoAtom
+		_splitSegInfoAtom->encode();
+	}
+	if ( _exportInfoAtom != nullptr ) {
+		try {
+			_exportInfoAtom->encode(); 		// needs _exportedAtoms, updates: _exportInfoAtom
+		} catch ( const char* msg ) {
+			exceptionMsg = msg;
+		}
+	}
+	try {
+		_symbolTableAtom->encode();			// needs _importedAtoms, _exportedAtoms, _localAtoms, state.stabs, updates: _symbolTableAtom
+		_indirectSymbolTableAtom->encode(); // needs state.section.atoms, `Atom::_outputSymbolIndex`, updates:  _indirectSymbolTableAtom
+	}
+	catch (const char* msg) {
+		exceptionMsg = msg;
+	}
+	if ( _functionStartsAtom != nullptr ) {
+		_functionStartsAtom->encode();	// needs state.section.atoms
+	}
+	if ( _dataInCodeAtom != nullptr ) {
+		_dataInCodeAtom->encode();		// needs state.section.atoms
+	}
+	if ( _optimizationHintsAtom != nullptr ) {
+		_optimizationHintsAtom->encode(); // needs state.section.atoms
+	}
+
+	if ( exceptionMsg != nullptr )
+		throw exceptionMsg;
+}
+"""
+
+
+def patch_linkedit(root):
+    rel = "cctools/ld64/src/ld/OutputFile.cpp"
+    path = f"{root}/{rel}"
+    src = open(path).read()
+    start = src.find(LINKEDIT_SIG)
+    assert start != -1, "buildLINKEDITContent not found"
+    brace = src.find("{", start)
+    assert brace != -1
+    close = find_matching_close(src, brace + 1)
+    src = src[:start] + LINKEDIT_SERIAL + src[close + 1:]
+    open(path, "w").write(src)
+    print(f"{rel}: buildLINKEDITContent serialized")
+    return 1
+
+
 def main(root="."):
     total = 0
     for rel in FILES:
@@ -121,6 +213,7 @@ def main(root="."):
         open(path, "w").write(patched)
         print(f"{rel}: patched {count}")
         total += count
+    total += patch_linkedit(root)
     print(f"total patched: {total}")
 
 
