@@ -14,4 +14,32 @@ createIPA.dependsOn build
 
 robovm {
 	archs = "thumbv7:arm64"
+	// Jailbroken armv7 devices (iPad mini 1st gen): no Apple signing.
+	// RoboVM then emits an unsigned .app ("Skipping code signing..."),
+	// installed via AppSync or pseudo-signed on-device with `ldid -S`.
+	iosSkipSigning = true
+}
+
+// RoboVM 2.3.0 predates the Gradle 4 output layout: it looks for classes
+// in build/classes/main, but Gradle 4.10 puts them in build/classes/java/main.
+// (Resources are still in build/resources/main on both.) Sync them over.
+task syncRoboVMClasses {
+	dependsOn compileJava, processResources
+	doLast {
+		copy {
+			from sourceSets.main.output.classesDirs
+			into "$buildDir/classes/main"
+		}
+		file("$buildDir/resources/main").mkdirs()
+	}
+}
+
+afterEvaluate {
+	tasks.each { t ->
+		if(t.class.name.startsWith('org.robovm.gradle.tasks.')
+			&& (t.name.startsWith('robovm') || t.name.startsWith('launch')
+				|| t.name.startsWith('createIPA'))) {
+			t.dependsOn syncRoboVMClasses
+		}
+	}
 }

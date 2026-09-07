@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Minimal iPhoneOS.platform/Info.plist stub (mirrors Xcode 9.4.1).
+     RoboVM SDK discovery requires this file plus the AdditionalInfo dict
+     (DTPlatformName/DTPlatformVersion); without them SDK listing throws. -->
+<plist version="1.0">
+<dict>
+    <key>AdditionalInfo</key>
+    <dict>
+        <key>DTPlatformName</key>
+        <string>iphoneos</string>
+        <key>DTPlatformVersion</key>
+        <string>10.3</string>
+        <key>DTSDKBuild</key>
+        <string>14E8301</string>
+    </dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.apple.platform.iphoneos</string>
+    <key>CFBundleShortVersionString</key>
+    <string>9.4.1</string>
+    <key>DTPlatformName</key>
+    <string>iphoneos</string>
+    <key>DTPlatformVersion</key>
+    <string>10.3</string>
+</dict>
+</plist>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Fake Xcode version stamp (mirrors Xcode 9.4.1 build 9F2000).
+     RoboVM falls back to fake values without it, but be explicit. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleShortVersionString</key>
+    <string>9.4.1</string>
+    <key>ProductBuildVersion</key>
+    <string>9F2000</string>
+</dict>
+</plist>

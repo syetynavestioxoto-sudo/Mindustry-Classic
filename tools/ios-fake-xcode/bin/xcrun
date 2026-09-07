@@ -1,0 +1,43 @@
+#!/bin/sh
+# xcrun shim.
+# - RoboVM calls: xcrun -sdk <sdk> -f <tool>
+# - Also handled: --show-sdk-path / --show-sdk-version[/ --sdk <sdk>]
+DEV="${FAKEXCODE:?FAKEXCODE not set}/Contents/Developer"
+SDKDIR="$DEV/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS10.3.sdk"
+sdk=""
+tool=""
+show=""
+# RoboVM also calls `xcrun <tool> [args]` (bare form, e.g. `xcrun strip -x ...`)
+if [ $# -gt 0 ]; then
+    case "$1" in
+        -*) ;;
+        *) tool="$1"; shift;;
+    esac
+fi
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -sdk) sdk="$2"; shift 2;;
+        -f) tool="$2"; shift 2;;
+        --show-sdk-path|--show-sdk-version|--show-sdk-platform-path) show="$1"; shift;;
+        *) shift;;
+    esac
+done
+if [ -n "$show" ]; then
+    case "$show" in
+        --show-sdk-path) echo "$SDKDIR";;
+        --show-sdk-version) echo "10.3";;
+        --show-sdk-platform-path) echo "$DEV/Platforms/iPhoneOS.platform";;
+    esac
+    exit 0
+fi
+[ -z "$tool" ] && { echo "xcrun shim: no -f <tool> given" >&2; exit 1; }
+CT=/opt/cctools/bin/arm-apple-darwin11
+case "$tool" in
+    clang|clang++|cc|gcc|g++) echo "${FAKEXCODE:?}/bin/clang-ios";;
+    lipo|nm|otool|strip|ar|ranlib|codesign_allocate|install_name_tool|size|strings)
+        echo "$CT-$tool";;
+    dsymutil|plutil|pngcrush|ibtool|actool)
+        echo "${FAKEXCODE:?}/bin/$tool";;
+    file) echo /usr/bin/file;;
+    *) echo "xcrun shim: unknown tool '$tool' (sdk=$sdk)" >&2; exit 1;;
+esac

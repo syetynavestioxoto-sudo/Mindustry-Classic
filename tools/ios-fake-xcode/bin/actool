@@ -1,0 +1,5 @@
+#!/bin/sh
+# Hard fail: .storyboard/.xib/.xcassets must not reach the Linux build.
+# (Classic's Assets.xcassets was removed from ios/data for this reason.)
+echo "FATAL: $(basename "$0") is not available on Linux: $*" >&2
+exit 1

@@ -1,0 +1,8 @@
+#!/bin/sh
+# pngcrush fallback (robovm.xml sets skipPngCrush, so this should not run).
+# Behave like `pngcrush -q -iphone -f 0 src dst` minus the crushing.
+echo "pngcrush shim (plain copy): $*" >&2
+n=$#
+src=$(eval "echo \$$((n-1))")
+dst=$(eval "echo \$$n")
+cp "$src" "$dst"

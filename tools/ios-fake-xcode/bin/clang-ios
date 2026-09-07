@@ -1,0 +1,112 @@
+#!/bin/sh
+# clang-ios: translates an Apple-clang *link* command from RoboVM 2.3.0 into
+# a direct Apple ld64 (cctools-port) invocation.
+#
+# If `-c` is present it is a compile: delegate to the real host clang++.
+# Otherwise translate known link flags, FAIL LOUDLY on anything unknown.
+# Full argv is always appended to $CLANG_IOS_LOG (default: stderr).
+#
+# Known-good input shape (RoboVM IOSTarget, device/thumbv7):
+#   clang++ -arch armv7 -isysroot <sdk> -miphoneos-version-min=8.0 \
+#     -o <out> [-Wl,-filelist,<f> | -filelist <f>] [objects...] \
+#     -framework F -lX -Ldir [-Xlinker arg] [-u sym] [-e sym] ...
+
+LOG="${CLANG_IOS_LOG:-/dev/stderr}"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || LOG=/dev/stderr
+echo "clang-ios argv: $*" >>"$LOG"
+
+REAL_CLANG="${REAL_CLANG:-/usr/bin/clang++}"
+LD=/opt/cctools/bin/arm-apple-darwin11-ld
+SDK_VERSION=10.3
+
+# compile mode -> real clang
+for a in "$@"; do
+    if [ "$a" = "-c" ]; then
+        exec "$REAL_CLANG" "$@"
+    fi
+done
+
+arch=""; sysroot=""; minver=""; out=""; filelist=""
+frameworks=""; libs=""; libdirs=""; objs=""; xlinker=""; entry=""; undefined=""
+rpath=""; objc=""; allload=""; deadstrip=""; pie="no_pie"
+
+fail() { echo "clang-ios: FATAL: $*" >>"$LOG"; echo "clang-ios: FATAL: $*" >&2; exit 1; }
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -arch) arch="$2"; shift 2;;
+        -isysroot) sysroot="$2"; shift 2;;
+        -miphoneos-version-min=*) minver="${1#-miphoneos-version-min=}"; shift;;
+        -o) out="$2"; shift 2;;
+        -Wl,-filelist,*) filelist="${1#-Wl,-filelist,}"; shift;;
+        -filelist) filelist="$2"; shift 2;;
+        -framework) frameworks="$frameworks -framework $2"; shift 2;;
+        -l*) libs="$libs $1"; shift;;
+        -L) libdirs="$libdirs -L $2"; shift 2;;
+        -L?*) libdirs="$libdirs $1"; shift;;
+        -Xlinker) xlinker="$xlinker $2"; shift 2;;
+        -u) undefined="$undefined -u $2"; shift 2;;
+        -e) entry="$entry -e $2"; shift 2;;
+        -exported_symbols_list) xlinker="$xlinker -exported_symbols_list $2"; shift 2;;
+        -force_load) xlinker="$xlinker -force_load $2"; shift 2;;
+        # compile-only flags that reach the link driver: harmless, drop them
+        -fPIC|-fPIE|-fno-pic|-fno-PIC|-fno-pie|-fno-PIE|-g|-g0|-g1|-g2|-g3) shift;;
+        -rpath) rpath="$rpath -rpath $2"; shift 2;;
+        -ObjC) objc=" -ObjC"; shift;;
+        -all_load) allload=" -all_load"; shift;;
+        -dead_strip) deadstrip=" -dead_strip"; shift;;
+        -Wl,-no_pie) pie=" -no_pie"; shift;;
+        -v) shift;; # informational only
+        -Wl,*) # -Wl,flag -> -flag for a known ld64 subset, else fail loudly
+            rest="${1#-Wl,}"
+            old_ifs="$IFS"; IFS=,
+            # shellcheck disable=SC2162
+            for w in $rest; do
+                case "$w" in
+                    -no_pie|-dead_strip)
+                        xlinker="$xlinker $w";;
+                    # -no_implicit_dylibs forbids using libSystem's re-exports
+                    # (e.g. libunwind), but sub-library tbds refuse direct
+                    # links ("link against the umbrella instead"). Apple
+                    # itself doesn't use this flag by default; drop it so
+                    # unwind etc. resolve via the libSystem re-export, which
+                    # is exactly what dyld does on-device.
+                    -no_implicit_dylibs) ;;
+                    *) fail "unknown -Wl option: $w (full argv in $LOG)";;
+                    *) fail "unknown -Wl option: $w (full argv in $LOG)";;
+                esac
+            done
+            IFS="$old_ifs"
+            shift;;
+        -*) fail "unknown flag: $1 (full argv in $LOG)";;
+        *) # object file / archive / dylib
+            objs="$objs $1"; shift;;
+    esac
+done
+
+[ -z "$arch" ] && fail "no -arch given"
+[ -z "$out" ] && fail "no -o given"
+[ -z "$sysroot" ] && fail "no -isysroot given"
+[ -z "$minver" ] && minver="8.0"
+
+inputs=""
+if [ -n "$filelist" ]; then
+    # filelist: one path per line, possibly quoted
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//')
+        [ -z "$line" ] && continue
+        inputs="$inputs $line"
+    done < "$filelist"
+fi
+
+# shellcheck disable=SC2086
+# -lc++/-lc++abi/-lgcc_s.1 replicate what the Apple clang++ driver adds
+# implicitly (C++ ABI + compiler-rt builtins live there on iOS).
+exec "$LD" -arch "$arch" \
+    -ios_version_min "$minver" -sdk_version "$SDK_VERSION" -no_uuid \
+    -syslibroot "$sysroot" \
+    -o "$out" \
+    $inputs $objs \
+    $frameworks $libs $libdirs \
+    -lc++ -lc++abi -lgcc_s.1 \
+    $xlinker $undefined $entry $rpath$objc$allload$deadstrip$pie

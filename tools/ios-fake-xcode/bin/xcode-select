@@ -1,0 +1,11 @@
+#!/bin/sh
+# xcode-select shim: only --print-path is used by RoboVM.
+# Prints the *Developer* dir, mirroring real Xcode
+# (.../Xcode.app/Contents/Developer), so that ../version.plist-style
+# relative lookups resolve to Contents/version.plist.
+if [ "$1" = "--print-path" ] || [ "$1" = "-p" ]; then
+    echo "${FAKEXCODE:?FAKEXCODE not set}/Contents/Developer"
+    exit 0
+fi
+echo "xcode-select shim: unsupported args: $*" >&2
+exit 1

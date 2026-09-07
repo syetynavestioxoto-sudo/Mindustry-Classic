@@ -137,3 +137,4 @@ gradle-app.setting
 Thumbs.db
 android/libs/
 __pycache__/
+tools/ios-fake-xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/

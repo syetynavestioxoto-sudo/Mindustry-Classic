@@ -1,0 +1,5 @@
+#!/bin/sh
+# plutil shim: RoboVM uses it to convert resource plists to binary.
+# iOS parses XML plists fine, so keep them as-is (jailbreak build).
+echo "plutil shim (no-op, keeping XML): $*" >&2
+exit 0

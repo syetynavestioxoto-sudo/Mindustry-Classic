@@ -1,0 +1,5 @@
+#!/bin/sh
+# dsymutil shim: dSYM bundles are only useful for debugging.
+# Jailbreak release builds don't need them.
+echo "dsymutil shim (no-op): $*" >&2
+exit 0
