@@ -99,7 +99,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq clang file zip git \
-            libblocksruntime0 libdispatch0
+            libblocksruntime0 libdispatch0 libplist3 libssl3
       - name: Seed RoboVM dist (offline, avoids dead http Central)
         uses: actions/cache/restore@v4
         id: m2
