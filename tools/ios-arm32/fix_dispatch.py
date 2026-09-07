@@ -21,13 +21,15 @@ FILES = [
 ]
 
 # Symbols Apple removed from modern libdispatch (Linux swift-corelibs).
-# Serial is the default attr (NULL); priority constants map to QoS classes.
+# Serial is the default attr (NULL); QoS priorities collapse to the
+# default global queue (0 = unspecified). This is a build host tool,
+# scheduling hints don't matter.
 QOS_COMPAT = {
     "DISPATCH_QUEUE_SERIAL": "NULL",
-    "DISPATCH_QUEUE_PRIORITY_HIGH": "QOS_CLASS_USER_INITIATED",
-    "DISPATCH_QUEUE_PRIORITY_DEFAULT": "QOS_CLASS_DEFAULT",
-    "DISPATCH_QUEUE_PRIORITY_LOW": "QOS_CLASS_UTILITY",
-    "DISPATCH_QUEUE_PRIORITY_BACKGROUND": "QOS_CLASS_BACKGROUND",
+    "DISPATCH_QUEUE_PRIORITY_HIGH": "0",
+    "DISPATCH_QUEUE_PRIORITY_DEFAULT": "0",
+    "DISPATCH_QUEUE_PRIORITY_LOW": "0",
+    "DISPATCH_QUEUE_PRIORITY_BACKGROUND": "0",
 }
 
 PAT = re.compile(
@@ -116,13 +118,6 @@ def main(root="."):
             if old in patched:
                 patched = patched.replace(old, new)
                 count += 1
-        # make sure QoS macros are visible
-        if "QOS_CLASS_" in patched and "sys/qos.h" not in patched:
-            patched = patched.replace(
-                "#include <dispatch/dispatch.h>",
-                "#include <dispatch/dispatch.h>\n#include <sys/qos.h>",
-                1,
-            )
         open(path, "w").write(patched)
         print(f"{rel}: patched {count}")
         total += count
