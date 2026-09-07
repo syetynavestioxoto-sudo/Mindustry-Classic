@@ -84,18 +84,37 @@ jobs:
           git -C /tmp/sdks sparse-checkout set iPhoneOS10.3.sdk
           grep -m1 'tapi-tbd' /tmp/sdks/iPhoneOS10.3.sdk/usr/lib/libSystem.tbd
           grep -m1 'armv7' /tmp/sdks/iPhoneOS10.3.sdk/usr/lib/libSystem.tbd
+      - name: Restore Apple toolchain
+        id: tc-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/cctools
+          key: cctools-armv7-${{ hashFiles('tools/ios-arm32/fix_dispatch.py', '.github/workflows/ios-arm32.yml') }}
       - name: Build Apple linker (cctools-port + libtapi)
         run: |
+          # Cache the built toolchain in $HOME so rebuilds take seconds.
+          echo "$HOME/cctools/bin" >> "$GITHUB_PATH"
+          if [ -x "$HOME/cctools/bin/arm-apple-darwin11-ld" ]; then
+            echo "toolchain cache hit"
+            arm-apple-darwin11-ld -v
+            exit 0
+          fi
           git clone --depth 1 https://github.com/tpoechtrager/apple-libtapi.git /tmp/tapi
-          (cd /tmp/tapi && ./build.sh && sudo ./install.sh)
+          (cd /tmp/tapi && INSTALLPREFIX="$HOME/cctools" ./build.sh && ./install.sh)
           git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git /tmp/ct
           python3 tools/ios-arm32/fix_dispatch.py /tmp/ct
           cd /tmp/ct/cctools
-          ./configure --prefix=/opt/cctools --with-libtapi=/usr/local \
+          ./configure --prefix="$HOME/cctools" --with-libtapi="$HOME/cctools" \
             --target=arm-apple-darwin11
           make -j$(nproc)
-          sudo make install
-          /opt/cctools/bin/arm-apple-darwin11-ld -v
+          make install
+          arm-apple-darwin11-ld -v
+      - name: Cache Apple toolchain
+        uses: actions/cache/save@v4
+        if: steps.tc-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/cctools
+          key: cctools-armv7-${{ hashFiles('tools/ios-arm32/fix_dispatch.py', '.github/workflows/ios-arm32.yml') }}
       - name: Compile armv7 objects (min iOS 8.0)
         run: |
           export SDK=/tmp/sdks/iPhoneOS10.3.sdk
@@ -109,7 +128,7 @@ jobs:
       - name: Link armv7 executables (Apple ld64)
         run: |
           export SDK=/tmp/sdks/iPhoneOS10.3.sdk
-          export LD=/opt/cctools/bin/arm-apple-darwin11-ld
+          export LD=$HOME/cctools/bin/arm-apple-darwin11-ld
           # NOTE: ld64-956 aborts on -platform_version for armv7
           # (recopyUUIDCommand assertion), so use classic version flags
           # plus -no_uuid (UUID not needed for jailbreak install).
