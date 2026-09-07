@@ -122,6 +122,9 @@ jobs:
             -framework UIKit -framework Foundation -framework CoreGraphics \
             -lobjc -lSystem
           file out/hello out/Classic8 | tee out/binaries.txt
+          ls -l out/hello out/Classic8
+          xxd out/hello | head -3
+          xxd out/Classic8 | head -3
           grep -q "Mach-O.*armv7" out/binaries.txt
       - name: Assemble unsigned IPA skeleton
         run: |
