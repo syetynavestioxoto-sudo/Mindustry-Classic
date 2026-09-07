@@ -12,7 +12,10 @@
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)options
 {
-    self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+    // NOTE: no -[UIScreen bounds] here: the trimmed theos SDK stubs lack
+    // _objc_msgSend_stret (armv7 struct-return helper). Fixed frame is fine
+    // for this scaffold; the full game glue will use complete Xcode stubs.
+    self.window = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, 1024, 768)];
     UIViewController *vc = [UIViewController new];
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, 280, 44)];
     label.text = @"Mindustry Classic iOS8 armv7";
