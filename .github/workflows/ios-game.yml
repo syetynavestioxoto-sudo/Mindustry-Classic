@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/cctools
-          key: cctools-armv7-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
+          key: cctools-armv7-s1-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
       - if: steps.tc.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
@@ -74,7 +74,7 @@ jobs:
         if: steps.tc.outputs.cache-hit != 'true'
         with:
           path: ~/cctools
-          key: cctools-armv7-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
+          key: cctools-armv7-s1-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
 
   game:
     name: Game IPA (armv7, unsigned)
@@ -94,7 +94,7 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/cctools
-          key: cctools-armv7-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
+          key: cctools-armv7-s1-${{ hashFiles('tools/ios-toolchain/fix_dispatch.py') }}
       - name: Install host deps
         run: |
           sudo apt-get update -qq
