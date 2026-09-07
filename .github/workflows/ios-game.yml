@@ -68,7 +68,7 @@ jobs:
           # Serial: parallel make silently relinks a corrupt ld here.
           make -j1
           make install
-          bash tools/ios-toolchain/build-ldid.sh "$HOME/cctools/bin"
+          bash "$GITHUB_WORKSPACE/tools/ios-toolchain/build-ldid.sh" "$HOME/cctools/bin"
           "$HOME/cctools/bin/arm-apple-darwin11-ld" -v
       - uses: actions/cache/save@v4
         if: steps.tc.outputs.cache-hit != 'true'
