@@ -91,7 +91,11 @@ project(":ios") {
 
     dependencies {
         compile project(":core")
-        implementation project(":kryonet")
+        // NOTE: must stay `compile`, not `implementation`: the RoboVM 2.3.0
+        // plugin only sees the legacy compile/runtime configurations, so an
+        // `implementation` dep is silently absent from the app
+        // (NoClassDefFoundError at runtime, "phantom class" at compile time).
+        compile project(":kryonet")
 
         compile "com.mobidevelop.robovm:robovm-rt:$roboVMVersion"
         compile "com.mobidevelop.robovm:robovm-cocoatouch:$roboVMVersion"
