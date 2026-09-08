@@ -26,7 +26,7 @@ for a in "$@"; do
     fi
 done
 
-arch=""; sysroot=""; minver=""; out=""; filelist=""
+arch=""; sysroot=""; minver=""; out=""
 frameworks=""; libs=""; libdirs=""; objs=""; xlinker=""; entry=""; undefined=""
 rpath=""; objc=""; allload=""; deadstrip=""; pie="no_pie"
 
@@ -38,8 +38,11 @@ while [ $# -gt 0 ]; do
         -isysroot) sysroot="$2"; shift 2;;
         -miphoneos-version-min=*) minver="${1#-miphoneos-version-min=}"; shift;;
         -o) out="$2"; shift 2;;
-        -Wl,-filelist,*) filelist="${1#-Wl,-filelist,}"; shift;;
-        -filelist) filelist="$2"; shift 2;;
+        # -filelist passes straight through to Apple ld (it reads the file
+        # itself). NEVER inline it: big apps have 10k+ objects whose paths
+        # exceed ARG_MAX (E2BIG) when expanded on a command line.
+        -Wl,-filelist,*) xlinker="$xlinker -filelist ${1#-Wl,-filelist,}"; shift;;
+        -filelist) xlinker="$xlinker -filelist $2"; shift 2;;
         -framework) frameworks="$frameworks -framework $2"; shift 2;;
         -l*) libs="$libs $1"; shift;;
         -L) libdirs="$libdirs -L $2"; shift 2;;
@@ -50,7 +53,7 @@ while [ $# -gt 0 ]; do
         -exported_symbols_list) xlinker="$xlinker -exported_symbols_list $2"; shift 2;;
         -force_load) xlinker="$xlinker -force_load $2"; shift 2;;
         # compile-only flags that reach the link driver: harmless, drop them
-        -fPIC|-fPIE|-fno-pic|-fno-PIC|-fno-pie|-fno-PIE|-g|-g0|-g1|-g2|-g3) shift;;
+        -fPIC|-fPIE|-fno-pic|-fno-PIC|-fno-pie|-fno-PIE|-g|-g0|-g1|-g2|-g3|-w) shift;;
         -rpath) rpath="$rpath -rpath $2"; shift 2;;
         -ObjC) objc=" -ObjC"; shift;;
         -all_load) allload=" -all_load"; shift;;
@@ -89,16 +92,6 @@ done
 [ -z "$sysroot" ] && fail "no -isysroot given"
 [ -z "$minver" ] && minver="8.0"
 
-inputs=""
-if [ -n "$filelist" ]; then
-    # filelist: one path per line, possibly quoted
-    while IFS= read -r line || [ -n "$line" ]; do
-        line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//')
-        [ -z "$line" ] && continue
-        inputs="$inputs $line"
-    done < "$filelist"
-fi
-
 # shellcheck disable=SC2086
 # -lc++/-lc++abi/-lgcc_s.1 replicate what the Apple clang++ driver adds
 # implicitly (C++ ABI + compiler-rt builtins live there on iOS).
@@ -106,7 +99,7 @@ exec "$LD" -arch "$arch" \
     -ios_version_min "$minver" -sdk_version "$SDK_VERSION" -no_uuid \
     -syslibroot "$sysroot" \
     -o "$out" \
-    $inputs $objs \
+    $objs \
     $frameworks $libs $libdirs \
     -lc++ -lc++abi -lgcc_s.1 \
     $xlinker $undefined $entry $rpath$objc$allload$deadstrip$pie

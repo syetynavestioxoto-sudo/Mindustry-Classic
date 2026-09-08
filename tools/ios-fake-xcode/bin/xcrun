@@ -34,7 +34,7 @@ fi
 CT="${CTOOLS_BIN:-/opt/cctools/bin}"/arm-apple-darwin11
 case "$tool" in
     clang|clang++|cc|gcc|g++) echo "${FAKEXCODE:?}/bin/clang-ios";;
-    lipo|nm|otool|strip|ar|ranlib|codesign_allocate|install_name_tool|size|strings)
+    lipo|nm|otool|strip|ar|ranlib|codesign_allocate|install_name_tool|size|strings|bitcode_strip)
         echo "$CT-$tool";;
     dsymutil|plutil|pngcrush|ibtool|actool)
         echo "${FAKEXCODE:?}/bin/$tool";;

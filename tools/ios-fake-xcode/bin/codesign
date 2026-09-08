@@ -1,0 +1,29 @@
+#!/bin/sh
+# codesign shim -> Linux ldid (RoboVM 2.3.13 shells to bare `codesign`
+# even on the pseudo-sign path; Apple codesign doesn't exist on Linux).
+# Maps: codesign -f -s <id> [--entitlements F] [other flags] <target>
+#    -> ldid -S[<entitlements>] <target>
+# Full argv is logged; unknown shapes fail loudly.
+LOG="${CODESIGN_LOG:-/dev/stderr}"
+echo "codesign argv: $*" >>"$LOG"
+LDID_BIN="${LDID_BIN:-$(command -v ldid)}"
+identity=""; entitlements=""; target=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -s) identity="$2"; shift 2;;
+        --entitlements) entitlements="$2"; shift 2;;
+        --entitlements=*) entitlements="${1#--entitlements=}"; shift;;
+        -f|--force|--deep|--verbose) shift;;
+        --timestamp=*|--options=*|--preserve-metadata=*) shift;;
+        --timestamp|--options|--preserve-metadata) shift 2;;
+        -*) echo "codesign shim: ignoring flag $1" >>"$LOG"; shift;;
+        *) target="$1"; shift;;
+    esac
+done
+[ -z "$target" ] && { echo "codesign shim: FATAL: no target" >&2; exit 1; }
+[ -x "$LDID_BIN" ] || { echo "codesign shim: FATAL: no ldid (LDID_BIN=$LDID_BIN)" >&2; exit 1; }
+if [ -n "$entitlements" ]; then
+    exec "$LDID_BIN" "-S$entitlements" "$target"
+else
+    exec "$LDID_BIN" -S "$target"
+fi
